@@ -1,0 +1,175 @@
+ext.jnaVersion = '4.5.2'
+ext.libraryName = 'libmongocrypt'
+ext.licenseShort = 'MongoDB Embedded License'
+ext.pomName = 'MongoDB Crypto for Java'
+ext.pomDescription = 'The MongoDB Crypto SDK for Java'
+ext.pomUrl = 'http://www.mongodb.org'
+ext.pomLicenseName = 'MongoDB Embedded License'
+ext.pomLicenseUrl = 'https://www.mongodb.com/licensing/embedded-license'
+ext.pomScmConnection = 'https://github.com/mongodb/mongo.git'
+ext.pomScmDevConnection = 'git@github.com:mongodb/mongo.git'
+ext.pomScmUrl = 'https://github.com/mongodb/mongo'
+
+buildscript {
+    repositories {
+        google()
+        jcenter()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.netflix.nebula:gradle-extra-configurations-plugin:1.12.+'
+        classpath 'org.jfrog.buildinfo:build-info-extractor-gradle:latest.release'
+        classpath "io.codearte.gradle.nexus:gradle-nexus-staging-plugin:0.12.0"
+    }
+}
+
+def getGitVersion() {
+    if (project.findProperty("versionOverride")) {
+        return versionOverride
+    } else {
+        def outputAsString
+
+        new ByteArrayOutputStream().withStream { os ->
+            def result = exec {
+                executable 'git'
+                args 'describe', '--tags', '--always'
+                standardOutput = os
+            }
+            outputAsString = os.toString().substring(1).trim()
+        }
+
+        return outputAsString
+    }
+}
+
+File localPropsFile = file('./local.properties')
+if (localPropsFile.exists()) {
+    Properties p = new Properties()
+    p.load(new FileInputStream(localPropsFile))
+    p.each { name, value ->
+        ext[name] = value
+    }
+}
+
+allprojects {
+    group = 'org.mongodb'
+    version = getGitVersion()
+
+    repositories {
+        google()
+        jcenter()
+    }
+}
+
+apply plugin: 'java-library'
+apply plugin: 'osgi'
+apply plugin: 'maven-publish'
+apply plugin: 'optional-base'
+apply plugin: 'com.jfrog.artifactory'
+apply plugin: 'io.codearte.nexus-staging'
+
+nexusStaging {
+    packageGroup = "org.mongodb"
+    username = ossrhUsername
+    password = ossrhPassword
+}
+
+
+sourceCompatibility = JavaVersion.VERSION_1_7
+targetCompatibility = JavaVersion.VERSION_1_7
+
+jar {
+    sourceSets {
+        main {
+            resources.srcDirs 'jniLibs'
+        }
+    }
+
+    manifest {
+        instruction 'Automatic-Module-Name', 'org.mongodb.driver.embedded.client.capi'
+        instruction 'Build-Version', getGitVersion()
+        instruction 'Import-Package',
+                'com.mongodb.*'
+    }
+}
+
+//task clean(type: Delete) {
+//    delete rootProject.buildDir
+//}
+
+
+task sourcesJar(type: Jar) {
+    from sourceSets.main.allJava
+    classifier = 'sources'
+}
+
+task javadocJar(type: Jar) {
+    from javadoc
+    classifier = 'javadoc'
+}
+
+dependencies {
+    api "net.java.dev.jna:jna:$jnaVersion"
+    api 'org.slf4j:slf4j-api:1.7.6', optional
+    testCompile 'junit:junit:4.12'
+}
+
+//publishing {
+//    publications {
+//        maven(MavenPublication) {
+//            artifactId = libraryName
+//
+//            from components.java
+//            artifact sourcesJar
+//            artifact javadocJar
+//
+//            pom {
+//                name = pomName
+//                description = pomDescription
+//                url = pomUrl
+//                licenses {
+//                    license {
+//                        name = pomLicenseName
+//                        url = pomLicenseUrl
+//                    }
+//                }
+//                scm {
+//                    connection = "scm:" + pomScmConnection
+//                    developerConnection = "scm:" + pomScmDevConnection
+//                    url = pomScmUrl
+//                }
+//            }
+//        }
+//    }
+//
+//    repositories {
+//        maven {
+//            name = 'local'
+//            url = "$buildDir/repo"
+//        }
+//    }
+//}
+
+
+artifactory {
+    contextUrl = "http://artifactory.corp.mongodb.com/artifactory"
+    publish {
+        repository {
+            repoKey = 'mongodb-mobile-local'
+            username = System.getenv('artifactory_mobile_user')
+            password = System.getenv('artifactory_mobile_pass')
+            maven = true
+        }
+        defaults {
+            publications ('maven')
+        }
+    }
+    resolve {
+        repository {
+            repoKey = 'maven'
+            username = System.getenv('artifactory_mobile_user')
+            password = System.getenv('artifactory_mobile_pass')
+            maven = true
+        }
+    }
+}
