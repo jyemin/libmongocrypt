@@ -1,3 +1,10 @@
+apply plugin: 'java-library'
+apply plugin: 'osgi'
+apply plugin: 'maven-publish'
+apply plugin: 'optional-base'
+apply plugin: 'com.jfrog.artifactory'
+apply plugin: 'io.codearte.nexus-staging'
+
 ext.jnaVersion = '4.5.2'
 ext.libraryName = 'libmongocrypt'
 ext.licenseShort = 'MongoDB Embedded License'
@@ -23,25 +30,6 @@ buildscript {
     }
 }
 
-def getGitVersion() {
-    if (project.findProperty("versionOverride")) {
-        return versionOverride
-    } else {
-        def outputAsString
-
-        new ByteArrayOutputStream().withStream { os ->
-            def result = exec {
-                executable 'git'
-                args 'describe', '--tags', '--always'
-                standardOutput = os
-            }
-            outputAsString = os.toString().substring(1).trim()
-        }
-
-        return outputAsString
-    }
-}
-
 File localPropsFile = file('./local.properties')
 if (localPropsFile.exists()) {
     Properties p = new Properties()
@@ -51,32 +39,23 @@ if (localPropsFile.exists()) {
     }
 }
 
-allprojects {
-    group = 'org.mongodb'
-    version = getGitVersion()
+group = 'org.mongodb'
+version = getGitVersion()
 
-    repositories {
-        google()
-        jcenter()
-    }
+repositories {
+    google()
+    jcenter()
 }
-
-apply plugin: 'java-library'
-apply plugin: 'osgi'
-apply plugin: 'maven-publish'
-apply plugin: 'optional-base'
-apply plugin: 'com.jfrog.artifactory'
-apply plugin: 'io.codearte.nexus-staging'
-
-nexusStaging {
-    packageGroup = "org.mongodb"
-    username = ossrhUsername
-    password = ossrhPassword
-}
-
 
 sourceCompatibility = JavaVersion.VERSION_1_7
 targetCompatibility = JavaVersion.VERSION_1_7
+
+dependencies {
+    api "net.java.dev.jna:jna:$jnaVersion"
+    api 'org.slf4j:slf4j-api:1.7.6', optional
+
+    testImplementation 'junit:junit:4.12'
+}
 
 jar {
     sourceSets {
@@ -93,11 +72,6 @@ jar {
     }
 }
 
-//task clean(type: Delete) {
-//    delete rootProject.buildDir
-//}
-
-
 task sourcesJar(type: Jar) {
     from sourceSets.main.allJava
     classifier = 'sources'
@@ -106,12 +80,6 @@ task sourcesJar(type: Jar) {
 task javadocJar(type: Jar) {
     from javadoc
     classifier = 'javadoc'
-}
-
-dependencies {
-    api "net.java.dev.jna:jna:$jnaVersion"
-    api 'org.slf4j:slf4j-api:1.7.6', optional
-    testCompile 'junit:junit:4.12'
 }
 
 //publishing {
@@ -171,5 +139,30 @@ artifactory {
             password = System.getenv('artifactory_mobile_pass')
             maven = true
         }
+    }
+}
+
+nexusStaging {
+    packageGroup = "org.mongodb"
+    username = project.properties['ossrhUsername'] ?: ""
+    password = project.properties['ossrhPassword'] ?: ""
+}
+
+def getGitVersion() {
+    if (project.findProperty("versionOverride")) {
+        return versionOverride
+    } else {
+        def outputAsString
+
+        new ByteArrayOutputStream().withStream { os ->
+            def result = exec {
+                executable 'git'
+                args 'describe', '--tags', '--always'
+                standardOutput = os
+            }
+            outputAsString = os.toString().substring(1).trim()
+        }
+
+        return outputAsString
     }
 }
